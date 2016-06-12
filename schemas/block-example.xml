@@ -1,0 +1,39 @@
+<bcdef_block>
+  <block_number>123</block_number>
+  <created>1998-03-04T12:54:23</created>
+  <applications>
+    <application>
+      <latest_transaction>1</latest_transaction>
+    </application>
+    <application name="name">
+      <latest_transaction>14</latest_transaction>
+      <retrieved_transactions>
+	<transaction>
+	  <number>3</number>
+	  <reason>Not retrievable</reason>
+	</transaction>
+      </retrieved_transactions>
+    </application>
+  </applications>
+  <transactions>
+    <transaction>
+      <application>name</application>
+      <number>12</number>
+      <data>CREATE Word SSK@bfdjkfldaj/data.txt</data>
+    </transaction>
+    <transaction>
+      <application>name</application>
+      <number>13</number>
+      <data>UPDATE AnotherWord 3 SSK@ldjfisdo/data.txt</data>
+    </transaction>
+    <transaction>
+      <application>name</application>
+      <number>14</number>
+      <data>DELETE AThirdWord 2</data>
+    </transaction>
+    <transaction>
+      <number>1</number>
+      <data>ADD_REPLACEMENT_BLOCK SSK@old_block_id/block.xml SSK@new_block_id/block.xml</data>
+    </transaction>
+  </transactions>
+</bcdef_block>

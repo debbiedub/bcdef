@@ -1,0 +1,12 @@
+<bcdef_participant>
+  <head_block>
+    <block_number>123</block_number>
+    <key>SSK@jfkdlafdjakl/block.xml</key>
+  </head_block>
+  <my_transactions>
+    <transaction>
+      <application>name</application>
+      <data>blabla</data>
+    </transaction>
+  </my_transactions>
+</bcdef_participant>
