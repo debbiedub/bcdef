@@ -1,39 +1,89 @@
 <bcdef_block>
-  <block_number>123</block_number>
-  <created>1998-03-04T12:54:23</created>
-  <applications>
+  <block_data>
+    <identity>SSK@FetchID1/BlockChainBlock-bf</identity>
+    <predecessor>SSK@FetchID3/BlockChainBlock-au</predecessor>
+    <number>123</number>
+    <created>1998-03-04T12:54:23</created>
+    <creator>
+      <identity>USK@FetchID1</identity>
+      <next_public_key>SSK@FetchID</next_public_key>
+    </creator>
+    <random_participants count="100">
+      <participant index="0">
+	<identity>USK@FetchID2/BlockChainStatement/12</identity>
+	<random>86827482725</random>
+      </participant>
+      <participant index="1">
+	<identity>USK@FetchID3/BlockChainStatement/58</identity>
+	<random>7242214211</random>
+      </participant>
+      ...
+      <participant index="37">
+	<identity>USK@FetchID1/BlockChainStatement/23</identity>
+	<random>another-random-number</random>
+      </participant>
+      <participant index="38" next_to_replace="True">
+	<identity>USK@FetchID4/BlockChainStatement/102</identity>
+	<random>yet-another-random-number</random>
+      </participant>
+      ...
+      <participant index="99">
+	<identity>USK@FetchID5/BlockChainStatement/77</identity>
+	<random>7242214211</random>
+      </participant>
+    </random_participants>
     <application>
       <latest_transaction>1</latest_transaction>
+      <transactions>
+	<transaction number="3">
+	  <data>ADD_REPLACEMENT_BLOCK SSK@old_block_id/block.xml SSK@new_block_id/block.xml</data>
+	</transaction>
+      </transactions>
     </application>
-    <application name="name">
+  </block_data>
+  <applications>
+    <application name="TheWiki">
       <latest_transaction>14</latest_transaction>
-      <retrieved_transactions>
-	<transaction>
-	  <number>3</number>
+      <transactions>
+	<transaction number="12">
+	  <data>CREATE Word SSK@bfdjkfldaj/data.txt</data>
+	  <from>USK@FetchID5/BlockChainStatement-77</from>
+	</transaction>
+	<transaction number="13">
+	  <data>UPDATE AnotherWord 3 SSK@ldjfisdo/data.txt</data>
+	  <from>USK@FetchID3/BlockChainStatement-58</from>
+	</transaction>
+	<transaction number="14">
+	  <data>DELETE AThirdWord 2</data>
+	  <from>USK@FetchID3/BlockChainStatement-58</from>
+	</transaction>
+      </transactions>
+      <cancelled_transactions>
+	<transaction number="3">
 	  <reason>Not retrievable</reason>
 	</transaction>
-      </retrieved_transactions>
+      </cancelled_transactions>
     </application>
   </applications>
-  <transactions>
-    <transaction>
-      <application>name</application>
-      <number>12</number>
-      <data>CREATE Word SSK@bfdjkfldaj/data.txt</data>
-    </transaction>
-    <transaction>
-      <application>name</application>
-      <number>13</number>
-      <data>UPDATE AnotherWord 3 SSK@ldjfisdo/data.txt</data>
-    </transaction>
-    <transaction>
-      <application>name</application>
-      <number>14</number>
-      <data>DELETE AThirdWord 2</data>
-    </transaction>
-    <transaction>
-      <number>1</number>
-      <data>ADD_REPLACEMENT_BLOCK SSK@old_block_id/block.xml SSK@new_block_id/block.xml</data>
-    </transaction>
-  </transactions>
+  <shortened_block_chain>
+    <first_required_block>12</first_required_block>
+    <restated_transactions>
+      <applications>
+	<application>
+	  <transactions>
+	    <transaction number="1" from_block="3">
+	      <data>ADD_REPLACEMENT_BLOCK SSK@old_block_id/block.xml SSK@new_block_id/block.xml</data>
+	    </transaction>
+	  </transactions>
+	</application>
+	<application name="TheWiki">
+	  <transactions>
+	    <transaction number="4" from_block="2">
+	      <data>CREATE Word 1 SSK@palanfdjkfa/page.txt</data>
+	    </transaction>
+	  </transactions>
+	</application>
+      </applications>
+    </restated_transactions>
+  </shortened_block_chain>
 </bcdef_block>
