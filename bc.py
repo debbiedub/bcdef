@@ -5,22 +5,77 @@ from fcp.xmlobject import XMLFile
 import argparse
 import datetime
 import logging
+import os
 import sys
 import time
 
 CONTEXT = "BCDEF"
 
-class Participants():
+
+class Participants:
     def add(self, node):
         pass
 
-class Application():
+
+class Application:
     def add(self, node):
         pass
 
+
+def toRootURI(uri):
+    return uri.split("/WebOfTrust/")[0] + "/"
+
+
+def toStatementURI(uri):
+    return uri + "BlockChainStatement/0"
+
+
+class Fetcher:
+    """Keeps track of all fetched URI:s and the cache."""
+    CACHE_DIR = "cache"
+    def __init__(self, node):
+        self.node = node
+
+        self.already_fetching = dict()
+        self.in_cache = dict()
+        self.waiting_for = dict()
+
+        if not os.path.exists(self.CACHE_DIR):
+            os.mkdir(self.CACHE_DIR)
+        else:
+            for dirpath, dirnames, filenames in os.walk(self.CACHE_DIR):
+                for filename in filenames:
+                    self.in_cache[filename] = 0
+
+    def assert_fetching(self, uri):
+        """Assert that we are fetching the uri."""
+        if uri in self.in_cache:
+            return
+        if uri in self.already_fetching:
+            return
+        self.already_fetching[uri] = 1
+        self.waiting_for[self.node.node.get(uri, async=True,
+                                            callback=self.callback)] = 1
+
+    def callback(self, status, value):
+        if status == 'successful':
+            open(os.path.join(self.CACHE_DIR, value["URI"]), "w").write(value["contents"])
+        if status == 'failed':
+            logging.warn("Failed to get " + value["URI"])
+
+    def wait(self):
+        while len(self.waiting_for):
+            for ticket in self.waiting_for:
+                if ticket.isComplete():
+                    self.waiting_for.pop(ticket)
+                    break
+            time.sleep(1)
+        self.already_fetching.clear()
+
+        
 class Node:
     def restart(self):
-        verbosity = None
+        verbosity = DETAIL
         self.node = FCPNode(verbosity=verbosity)
         logging.info("Connected to the node")
 
@@ -46,10 +101,9 @@ class Node:
                 raise IllegalArgument("Cannot find name " + name)
         self.nickname = ownIdentity["Replies.Nickname" + index]
         self.identity = ownIdentity["Replies.Identity" + index]
-        self.inserturi = ownIdentity["Replies.InsertURI" + index].split("/WebOfTrust/")[0] + "/"
+        self.inserturi = toRootURI(ownIdentity["Replies.InsertURI" + index])
         assert uriIsPrivate(self.inserturi)
-        self.requesturi = ownIdentity["Replies.RequestURI" + index].split("/WebOfTrust/")[0] + "/"
-        assert uriIsPublic(self.requesturi)
+        self.requesturi = toRootURI(ownIdentity["Replies.RequestURI" + index])
 
         self.contexts = []
         for p in range(100):
@@ -60,6 +114,9 @@ class Node:
                 break
 
         logging.info("You are: %s", self.nickname)
+
+        self.fetcher = Fetcher(self)
+
 
     def WOTMessage(self, message, **kw):
         kw["Message"] = message
@@ -126,8 +183,20 @@ class Node:
                             Context=CONTEXT)
 
         # TODO: Add functions
-
         # Fetch participants statements, set up subscriptions for USKs
+        waiting_for = []
+        already_fetching = []
+        for i in range(participants["Replies.Amount"]):
+            participanturi = toRootURI(participants["Replies.Identities." +
+                                                    str(i) +
+                                                    ".RequestURI"])
+            statementuri = toStatementURI(participanturi)
+            self.fetcher.assert_fetching(statementuri)
+
+        self.fetcher.wait()
+        return
+        
+
         # As new blocks arrive:
         # 1. Verify blocks.
         # 2. When you have a long block chain (100 or so) or when you
@@ -153,7 +222,7 @@ class Node:
         print br
         uri = br
         loggin.info("Inserting Statement")
-        r = self.node.put(uri=self.inserturi + "BlockChainStatement/0/contents.xml",
+        r = self.node.put(uri=toStatementURI(self.inserturi),
                           data="some data: " + uri,
                           mimetype="application/xml",
                           priority=2,
