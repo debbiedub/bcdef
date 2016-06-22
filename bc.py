@@ -2,8 +2,11 @@
 
 from fcp.node import FCPNode, DETAIL, FCPProtocolError, uriIsPrivate
 from fcp.xmlobject import XMLFile
-import time
+import argparse
 import datetime
+import logging
+import sys
+import time
 
 CONTEXT = "BCDEF"
 
@@ -17,27 +20,46 @@ class Application():
 
 class Node:
     def restart(self):
-        self.node = FCPNode(verbosity=DETAIL)
+        verbosity = None
+        self.node = FCPNode(verbosity=verbosity)
+        logging.info("Connected to the node")
 
-    def __init__(self):
+    def __init__(self, name=None):
         self.restart()
         self._wait_for_wot()
         ownIdentity = self.WOTMessage("GetOwnIdentities")[0]
-        assert ownIdentity["Replies.Amount"] == 1
-        self.nickname = ownIdentity["Replies.Nickname0"]
-        self.identity = ownIdentity["Replies.Identity0"]
-        self.inserturi = ownIdentity["Replies.InsertURI0"].split("/WebOfTrust/")[0] + "/"
-        self.requesturi = ownIdentity["Replies.RequestURI0"].split("/WebOfTrust/")[0] + "/"
+        if name is None:
+            if ownIdentity["Replies.Amount"] == 1:
+                index = "0"
+            else:
+                logging.fatal("Must specify name since your WoT does not have a single identity.")
+                for i in range(ownIdentity["Replies.Amount"]):
+                    logging.fatal("Available identity: %s",
+                                  ownIdentity["Replies.Nickname" + str(i)])
+                sys.exit(1)
+        else:
+            for i in range(ownIdentity["Replies.Amount"]):
+                if name == ownIdentity["Replies.Nickname" + str(i)]:
+                    index = str(i)
+                    break
+            else:
+                raise IllegalArgument("Cannot find name " + name)
+        self.nickname = ownIdentity["Replies.Nickname" + index]
+        self.identity = ownIdentity["Replies.Identity" + index]
+        self.inserturi = ownIdentity["Replies.InsertURI" + index].split("/WebOfTrust/")[0] + "/"
+        assert uriIsPrivate(self.inserturi)
+        self.requesturi = ownIdentity["Replies.RequestURI" + index].split("/WebOfTrust/")[0] + "/"
+        assert uriIsPublic(self.requesturi)
 
         self.contexts = []
         for p in range(100):
-            cp = "Replies.Contexts0.Context" + str(p)
+            cp = "Replies.Contexts" + index + ".Context" + str(p)
             if cp in ownIdentity:
                 self.contexts.append(ownIdentity[cp])
             else:
                 break
 
-        print "You are:", self.nickname
+        logging.info("You are: %s", self.nickname)
 
     def WOTMessage(self, message, **kw):
         kw["Message"] = message
@@ -52,7 +74,8 @@ class Node:
             except FCPProtocolError:
                 self.node.shutdown()
                 self.node = None
-                print "Can't find WebOfTrust. Will retry after", str(waiting_time) + "s."
+                logging.warn("Can't find WebOfTrust. Will retry after %ds.",
+                             waiting_time)
                 time.sleep(waiting_time)
                 waiting_time += 10
                 self.restart()
@@ -91,6 +114,17 @@ class Node:
         
 
     def run(self):
+        participants = self.WOTMessage("GetIdentitiesByScore",
+                                       Context=CONTEXT, Selection="+")[0]
+        logging.info("Block Chain Participants: %s",
+                     participants["Replies.Amount"])
+
+        if not CONTEXT in self.contexts:
+            logging.info("Joining %s for the first time.", CONTEXT)
+            self.WOTMessage("AddContext",
+                            Identity=self.identity,
+                            Context=CONTEXT)
+
         pub, priv = self.node.genkey()
         print priv
         print self.create_block(identity="a", next_public_key=pub, 
@@ -98,29 +132,17 @@ class Node:
                                 participants=Participants())
         return
 
-        participants = self.WOTMessage("GetIdentitiesByScore",
-                                       Context=CONTEXT, Selection="+")[0]
-        print "Block Chain Participants:", participants["Replies.Amount"]
 
-        if not CONTEXT in self.contexts:
-            print "Joining", CONTEXT, "for the first time."
-            self.WOTMessage("AddContext",
-                            Identity=self.identity,
-                            Context=CONTEXT)
-
-        insertURI = self.inserturi
-        assert uriIsPrivate(insertURI)
-
-        print "Inserting Block"
-        br = self.node.put(uri='SSK' + insertURI[3:] + "BlockChainBlock-b",
+        logging.info("Inserting Block")
+        br = self.node.put(uri='SSK' + self.inserturi[3:] + "BlockChainBlock-b",
                            data="some data in the block",
                            mimetype="application/xml",
                            priority=2,
                            Verbosity=9)
         print br
         uri = br
-        print "Inserting Statement"
-        r = self.node.put(uri=insertURI + "BlockChainStatement/0/contents.xml",
+        loggin.info("Inserting Statement")
+        r = self.node.put(uri=self.inserturi + "BlockChainStatement/0/contents.xml",
                           data="some data: " + uri,
                           mimetype="application/xml",
                           priority=2,
@@ -130,7 +152,14 @@ class Node:
 
 
 def main():
-    node = Node()
+    logging.basicConfig(level=logging.INFO)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name", type=str,
+                        help="Name of the user")
+    args = parser.parse_args()
+    node = Node(args.name)
+
     node.run()
 
 
