@@ -125,6 +125,17 @@ class Node:
                             Identity=self.identity,
                             Context=CONTEXT)
 
+        # TODO: Add functions
+
+        # Fetch participants statements, set up subscriptions for USKs
+        # As new blocks arrive:
+        # 1. Verify blocks.
+        # 2. When you have a long block chain (100 or so) or when you
+        #    have received information from everyone, publish your
+        #    statement with the last block of the longest chain.
+        # 3. Calculate when you are allowed to insert a block and do so.
+
+
         pub, priv = self.node.genkey()
         print priv
         print self.create_block(identity="a", next_public_key=pub, 
