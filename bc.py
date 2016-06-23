@@ -10,7 +10,7 @@ import sys
 import time
 
 CONTEXT = "BCDEF"
-
+CONTENT_TYPE = "application/xml"
 
 class Participants:
     def add(self, node):
@@ -30,6 +30,21 @@ def toStatementURI(uri):
     return uri + "BlockChainStatement/0"
 
 
+def toFilename(uri):
+    return (uri.
+            replace("_", " ").
+            replace(":", "__c").
+            replace("/", "__s").
+            replace(" ", "__u"))
+
+def fromFilename(filename):
+    return (filename.
+            replace("__u", " ").
+            replace("__s", "/").
+            replace("__c", ":").
+            replace(" ", "_"))
+
+
 class Fetcher:
     """Keeps track of all fetched URI:s and the cache."""
     CACHE_DIR = "cache"
@@ -38,14 +53,14 @@ class Fetcher:
 
         self.already_fetching = dict()
         self.in_cache = dict()
-        self.waiting_for = dict()
+        self.waiting_for = dict()  # id => JobTicket
 
         if not os.path.exists(self.CACHE_DIR):
             os.mkdir(self.CACHE_DIR)
         else:
             for dirpath, dirnames, filenames in os.walk(self.CACHE_DIR):
                 for filename in filenames:
-                    self.in_cache[filename] = 0
+                    self.in_cache[fromFilename(filename)] = 0
 
     def assert_fetching(self, uri):
         """Assert that we are fetching the uri."""
@@ -54,19 +69,31 @@ class Fetcher:
         if uri in self.already_fetching:
             return
         self.already_fetching[uri] = 1
-        self.waiting_for[self.node.node.get(uri, async=True,
-                                            callback=self.callback)] = 1
+        ticket = self.node.node.get(uri, async=True,
+                                    callback=self.callback)
+        self.waiting_for[ticket.id] = ticket
 
     def callback(self, status, value):
-        if status == 'successful':
-            open(os.path.join(self.CACHE_DIR, value["URI"]), "w").write(value["contents"])
+        print value
+        print self.waiting_for
         if status == 'failed':
             logging.warn("Failed to get " + value["URI"])
+            return
+        if status != 'successful':
+            return
+        content_type, contents, parameters = value
+        if content_type != CONTENT_TYPE:
+            logging.warn("Received strange data " + content_type + ". " +
+                         "Ignoring.")
+            return
+        id = parameters["Identifier"]
+        uri = self.waiting_for[id].uri
+        open(os.path.join(self.CACHE_DIR, toFilename(uri)), "w").write(contents)
 
     def wait(self):
         while len(self.waiting_for):
             for ticket in self.waiting_for:
-                if ticket.isComplete():
+                if self.waiting_for[ticket].isComplete():
                     self.waiting_for.pop(ticket)
                     break
             time.sleep(1)
