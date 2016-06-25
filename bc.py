@@ -187,7 +187,7 @@ class Node:
         creator._addNode("identity")._addText(self.requesturi)
         creator._addNode("next_public_key")._addText(next_public_key)
         if participants:
-            participants.add(block_data._addNode("random_participants"))
+            participants_node = participants.add(block_data._addNode("participants"))
         if block_chain_application:
             block_chain_application.add(block_data)
         applications = block_data._addNode("applications")

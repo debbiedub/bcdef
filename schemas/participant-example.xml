@@ -1,7 +1,7 @@
 <bcdef_participant>
   <participant>
     <identity>USK@FetchID1/BlockChainStatement/23</identity>
-    <random>another-random-number</random>
+    <random>random-number</random>
   </participant>
   <block_data>
     <identity>SSK@FetchID1/BlockChainBlock-bf</identity>

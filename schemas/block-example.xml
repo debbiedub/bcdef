@@ -8,30 +8,18 @@
       <identity>USK@FetchID1</identity>
       <next_public_key>SSK@FetchID</next_public_key>
     </creator>
-    <random_participants count="100">
-      <participant index="0">
-	<identity>USK@FetchID2/BlockChainStatement/12</identity>
-	<random>86827482725</random>
-      </participant>
-      <participant index="1">
-	<identity>USK@FetchID3/BlockChainStatement/58</identity>
-	<random>7242214211</random>
-      </participant>
+    <participants>
+      <sequence>12</sequence> <!-- for the creator of this block -->
+      <sequence>58</sequence> <!-- for the creator of the previous block,
+                                   unless the same as the creator of this
+				   block.
+				   -->
       ...
-      <participant index="37">
-	<identity>USK@FetchID1/BlockChainStatement/23</identity>
-	<random>another-random-number</random>
-      </participant>
-      <participant index="38" next_to_replace="True">
-	<identity>USK@FetchID4/BlockChainStatement/102</identity>
-	<random>yet-another-random-number</random>
-      </participant>
+      <sequence>23</sequence> 
+      <sequence>102</sequence>
       ...
-      <participant index="99">
-	<identity>USK@FetchID5/BlockChainStatement/77</identity>
-	<random>7242214211</random>
-      </participant>
-    </random_participants>
+      <sequence>77</sequence>
+    </participants>
     <application>
       <latest_transaction>1</latest_transaction>
       <transactions>
