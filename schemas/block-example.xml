@@ -9,16 +9,16 @@
       <next_public_key>SSK@FetchID</next_public_key>
     </creator>
     <participants>
-      <sequence>12</sequence> <!-- for the creator of this block -->
-      <sequence>58</sequence> <!-- for the creator of the previous block,
-                                   unless the same as the creator of this
-				   block.
-				   -->
+      <edition>12</edition> <!-- for the creator of this block -->
+      <edition>58</edition> <!-- for the creator of the previous block,
+                                 unless the same as the creator of this
+				 block.
+			         -->
       ...
-      <sequence>23</sequence> 
-      <sequence>102</sequence>
+      <edition>23</edition> 
+      <edition>102</edition>
       ...
-      <sequence>77</sequence>
+      <edition>77</edition>
     </participants>
     <application>
       <latest_transaction>1</latest_transaction>
