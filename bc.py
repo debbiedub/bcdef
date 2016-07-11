@@ -14,6 +14,71 @@ CONTEXT = "BCDEF"
 CONTENT_TYPE = "application/xml"
 CACHE_DIR = "cache"
 
+
+class Fetcher:
+    """Keeps track of all fetched URI:s and the cache."""
+    def __init__(self, node):
+        self.node = node
+
+        self.already_fetching = dict()  # uri => [callback, ...]
+        self.in_cache = dict()
+        self.ids = dict()  # identity => Jobticket
+
+        if not os.path.exists(CACHE_DIR):
+            os.mkdir(CACHE_DIR)
+        else:
+            for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
+                for filename in filenames:
+                    self.in_cache[fromFilename(filename)] = 0
+
+    def fetch(self, uri, callback):
+        """When done, CALLBACK is called with URI and success (a boolean)."""
+        if uri in self.in_cache:
+            callback(uri, True)
+            return
+        if uri in self.already_fetching:
+            self.already_fetching[uri].append(callback)
+        else:
+            self.already_fetching[uri] = [callback]
+        ticket = self.node.node.get(uri, async=True,
+                                    callback=self.callback)
+        self.ids[ticket.id] = ticket
+        
+    def callback(self, status, value):
+        logging.debug("Fetcher callback " + str(status) + " " + str(value))
+        if status == "pending":
+            return
+
+        if status == 'failed':
+            logging.warn("Fetched failed: " + value["CodeDescription"])
+            identifier = value["Identifier"]
+            uri = self.ids[identifier].uri
+            for callback in self.already_fetching[uri]:
+                callback(uri, False)
+            self.already_fetching.pop(uri)
+            self.ids.pop(identifier)
+            return
+
+        content_type, data, parameters = value
+        identifier = parameters["Identifier"]
+        uri = self.ids[identifier].uri
+
+        if content_type != CONTENT_TYPE:
+            logging.warn("Fetched failed on content type.")
+            for callback in self.already_fetching[uri]:
+                callback(uri, False)
+            self.already_fetching.pop(uri)
+            self.ids.pop(identifier)
+            return
+
+        logging.info("Fetched " + uri)
+        open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write(data)
+        for callback in self.already_fetching[uri]:
+            callback(uri, True)
+        self.already_fetching.pop(uri)
+        self.ids.pop(identifier)
+
+
 class Participants:
     """Monitor all participants and retrieve their blocks."""
     def __init__(self, node, fetcher):
@@ -208,70 +273,6 @@ def fromFilename(filename):
             replace(" ", "_"))
 
 
-class Fetcher:
-    """Keeps track of all fetched URI:s and the cache."""
-    def __init__(self, node):
-        self.node = node
-
-        self.already_fetching = dict()  # uri => [callback, ...]
-        self.in_cache = dict()
-        self.ids = dict()  # identity => Jobticket
-
-        if not os.path.exists(CACHE_DIR):
-            os.mkdir(CACHE_DIR)
-        else:
-            for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
-                for filename in filenames:
-                    self.in_cache[fromFilename(filename)] = 0
-
-    def fetch(self, uri, callback):
-        """When done, CALLBACK is called with URI and success (a boolean)."""
-        if uri in self.in_cache:
-            callback(uri, True)
-            return
-        if uri in self.already_fetching:
-            self.already_fetching[uri].append(callback)
-        else:
-            self.already_fetching[uri] = [callback]
-        ticket = self.node.node.get(uri, async=True,
-                                    callback=self.callback)
-        self.ids[ticket.id] = ticket
-        
-    def callback(self, status, value):
-        logging.debug("Fetcher callback " + str(status) + " " + str(value))
-        if status == "pending":
-            return
-
-        if status == 'failed':
-            logging.warn("Fetched failed: " + value["CodeDescription"])
-            identifier = value["Identifier"]
-            uri = self.ids[identifier].uri
-            for callback in self.already_fetching[uri]:
-                callback(uri, False)
-            self.already_fetching.pop(uri)
-            self.ids.pop(identifier)
-            return
-
-        content_type, data, parameters = value
-        identifier = parameters["Identifier"]
-        uri = self.ids[identifier].uri
-
-        if content_type != CONTENT_TYPE:
-            logging.warn("Fetched failed on content type.")
-            for callback in self.already_fetching[uri]:
-                callback(uri, False)
-            self.already_fetching.pop(uri)
-            self.ids.pop(identifier)
-            return
-
-        logging.info("Fetched " + uri)
-        open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write(data)
-        for callback in self.already_fetching[uri]:
-            callback(uri, True)
-        self.already_fetching.pop(uri)
-        self.ids.pop(identifier)
-
-        
 class BCMain:
     def restart(self):
         verbosity = DETAIL
