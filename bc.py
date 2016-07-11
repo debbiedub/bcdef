@@ -291,7 +291,7 @@ class BCMain:
             else:
                 logging.fatal("Must specify name since your WoT does not have a single identity.")
                 for i in range(ownIdentity["Replies.Amount"]):
-                    logging.fatal("Available identity: %s",
+                    logging.fatal("Available nickname: %s",
                                   ownIdentity["Replies.Nickname" + str(i)])
                 sys.exit(1)
         else:
@@ -300,7 +300,7 @@ class BCMain:
                     index = str(i)
                     break
             else:
-                raise ValueError("Cannot find name " + name)
+                raise ValueError("Cannot find nickname " + name)
         self.nickname = ownIdentity["Replies.Nickname" + index]
         self.identity = ownIdentity["Replies.Identity" + index]
         self.inserturi = toRootURI(ownIdentity["Replies.InsertURI" + index])
