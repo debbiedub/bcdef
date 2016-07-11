@@ -9,16 +9,34 @@
       <next_public_key>SSK@FetchID</next_public_key>
     </creator>
     <participants>
-      <edition>12</edition> <!-- for the creator of this block -->
-      <edition>58</edition> <!-- for the creator of the previous block,
-                                 unless the same as the creator of this
-				 block.
-			         -->
+      <participant> <!-- for the creator of this block -->
+	<identity>USK@FetchID1</identity>
+	<edition>12</edition>
+      </participant>
+      <participant>
+	<identity>USK@FetchID2</identity>
+	<edition>58</edition> <!-- for the creator of the previous block,
+                                   unless the same as the creator of this
+				   block.
+			           -->
+	<random>random-number2</random> <!-- Used random number -->
+      </participant>
+      <participant>
+	<identity>USK@FetchID3</identity>
+	<edition>16</edition> <!-- for the creator of the previous block,
+                                   unless the same as the creator of this
+				   block.
+			           -->
+      </participant>
       ...
-      <edition>23</edition> 
-      <edition>102</edition>
-      ...
-      <edition>77</edition>
+      <participant>
+	<identity>USK@FetchID8</identity>
+	<edition>22</edition> <!-- for the creator of the previous block,
+                                   unless the same as the creator of this
+				   block.
+			           -->
+	<random>random-number8</random> <!-- Used random number -->
+      </participant>
     </participants>
     <application>
       <latest_transaction>1</latest_transaction>
