@@ -89,7 +89,7 @@ class Fetcher:
         if uri in self.in_cache:
             return uri
         result = self.node.node.get(uri, async=False)
-        content_type, data, parameters = value
+        content_type, data, parameters = result
         if content_type != CONTENT_TYPE:
             raise RuntimeError("Incorrect content_type")
         open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write(data)
@@ -139,7 +139,7 @@ class Participants:
                     if not self.validate_dom(dom):
                         logging.error("Fetched " + uri + " incorrect xml.")
                         return
-                    self.queue.put(dom.bcdef_participant.participant.identity)
+                    self.queue.put(dom.bcdef_participant.block_data.identity._text)
                 except ExpatError | AttributeError:
                     logging.error("Fetched " + uri + " invalid xml.")
             else:
@@ -221,7 +221,7 @@ class Blocks:
         if filename not in self.blocks:
             whole_filename = os.path.join(CACHE_DIR, filename)
             if os.path.exists(whole_filename):
-                self.blocks[filename] = XMLFile(file=whole_filename)
+                self.blocks[filename] = XMLFile(path=whole_filename)
             else:
                 self.required_data[filename] = 1
 
@@ -300,22 +300,21 @@ class Blocks:
         "Does verification but does not store the result."
         self.add_block(filename)
         root = self.blocks[filename]
-        if root.block_data.previous_block:
-            previous_filename = toFilename(root.block_data.previous_block)
+        if hasattr(root.bcdef_block.block_data, "previous_block"):
+            previous_filename = toFilename(root.bcdef_blockblock_data.previous_block._text)
             previous_result = self.verify_block(previous_filename)
             if previous_result is False:
                 logging.warn("Previous block did not verify for " + filename)
                 return False
             if previous_result is None:
                 return None
-            if (root.block_data.number != 
+            if (int(root.bcdef_block.block_data.number._text) != 
                 self.blocks[previous_filename].block_data.number + 1):
                 logging.warn("Is not a successor of the previous block: " + 
                              filename)
                 return False
 
-        logging.warn("Need to add more elaborate checks to really verify " + 
-                     filename)
+        logging.warn("Need to add more elaborate checks to verify every block.")
 
         return True
         
@@ -491,7 +490,7 @@ class BCMain:
                     continue
                 raise RuntimeException("Block does not verify: " + uri)
             if result == True:
-                whole_block_chain_fetch = True
+                whole_block_chain_fetched = True
             if result is None:
                 logging.debug("Download more info to verify")
                 for required in self.blocks.get_required_data():
