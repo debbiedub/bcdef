@@ -3,6 +3,7 @@
 from fcp.node import FCPNode, DETAIL, FCPProtocolError, uriIsPrivate, \
     FCPPutFailed
 from fcp.xmlobject import XMLFile
+from xml.parsers.expat import ExpatError
 import argparse
 import datetime
 import logging
@@ -42,9 +43,9 @@ class Fetcher:
             self.already_fetching[uri].append(callback)
         else:
             self.already_fetching[uri] = [callback]
-        ticket = self.node.node.get(uri, async=True,
-                                    callback=self.callback)
-        self.ids[ticket.id] = ticket
+            ticket = self.node.node.get(uri, async=True,
+                                        callback=self.callback)
+            self.ids[ticket.id] = ticket
         
     def callback(self, status, value):
         logging.debug("Fetcher callback " + str(status) + " " + str(value))
@@ -119,8 +120,10 @@ class Participants:
             if not self.round_finished.full():
                 self.round_finished.put(1, block=False)
             return
-        statementuri = value["URI"]
-        self.fetcher.fetch(statementuri, self.fetch_callback)
+        # if value["NewKnownGood"] != "true":
+        #    return
+        uri = value["URI"]
+        self.fetcher.fetch(uri, self.fetch_callback)
         
     def validate_dom(self, dom):
         logging.warn("TODO: Add more verification on participants xml")
@@ -132,12 +135,12 @@ class Participants:
             if os.path.exists(filename):
                 self.last_file[toParticipant(uri)] = filename
                 try:
-                    dom = XMLFile(filename)
+                    dom = XMLFile(path=filename)
                     if not self.validate_dom(dom):
                         logging.error("Fetched " + uri + " incorrect xml.")
                         return
-                    self.queue.put(dom.block_data.identity)
-                except:
+                    self.queue.put(dom.bcdef_participant.participant.identity)
+                except ExpatError | AttributeError:
                     logging.error("Fetched " + uri + " invalid xml.")
             else:
                 logging.error("Fetched " + uri + " without file.")
@@ -507,7 +510,7 @@ class BCMain:
         return
 
     def create_first_block(self):
-        self.participants.wait_for_round()
+        # self.participants.wait_for_round()
 
         number = 1
 
