@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from fcp.node import FCPNode, DETAIL, FCPProtocolError, uriIsPrivate
+from fcp.node import FCPNode, DETAIL, FCPProtocolError, uriIsPrivate, \
+    FCPPutFailed
 from fcp.xmlobject import XMLFile
 import argparse
 import datetime
@@ -8,6 +9,7 @@ import logging
 import os
 import sys
 import time
+import random
 from Queue import Queue
 
 CONTEXT = "BCDEF"
@@ -29,7 +31,7 @@ class Fetcher:
         else:
             for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
                 for filename in filenames:
-                    self.in_cache[fromFilename(filename)] = 0
+                    self.in_cache[fromFilename(filename)] = 1
 
     def fetch(self, uri, callback):
         """When done, CALLBACK is called with URI and success (a boolean)."""
@@ -77,6 +79,20 @@ class Fetcher:
             callback(uri, True)
         self.already_fetching.pop(uri)
         self.ids.pop(identifier)
+        self.in_cache[uri] = 1
+
+    def blocking_fetch(self, uri):
+        """Same as fetch except that we block until it succeeds.
+
+        If the data is not found, an exception is thrown (from lower level)."""
+        if uri in self.in_cache:
+            return uri
+        result = self.node.node.get(uri, async=False)
+        content_type, data, parameters = value
+        if content_type != CONTENT_TYPE:
+            raise RuntimeError("Incorrect content_type")
+        open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write(data)
+        return uri
 
 
 class Participants:
@@ -86,15 +102,22 @@ class Participants:
         self.fetcher = fetcher
         self.last_id = 0
         self.queue = Queue()
+        self.last_file = dict()
+        self.round_finished = Queue(maxsize=1)
+        self.random = random.Random()
 
     def usk_callback(self, status, value):
         logging.debug("Participants USK-callback " +
                       str(status) + " " + str(value))
         if status != 'successful':
             return
+        if value["header"] == "SubscribedUSK":
+            return
         if value["header"] == "SubscribedUSKSendingToNetwork":
             return
         if value["header"] == "SubscribedUSKRoundFinished":
+            if not self.round_finished.full():
+                self.round_finished.put(1, block=False)
             return
         statementuri = value["URI"]
         self.fetcher.fetch(statementuri, self.fetch_callback)
@@ -107,6 +130,7 @@ class Participants:
         if success:
             filename = os.path.join(CACHE_DIR, toFilename(uri))
             if os.path.exists(filename):
+                self.last_file[toParticipant(uri)] = filename
                 try:
                     dom = XMLFile(filename)
                     if not self.validate_dom(dom):
@@ -131,13 +155,54 @@ class Participants:
     def we_are_waiting(self):
         return self.last_id > 0
 
+    def wait_for_round(self):
+        while not self.round_finished.empty():
+            self.round_finished.get()
+        return self.round_finished.get()
+
     def get_new_block_reference(self):
         if self.queue.empty():
             return None
         return self.queue.get(False)
 
-    def get_last_edition_for(self, uri):
-        return 0
+    def get_last_for(self, participant):
+        """Return edition and random."""
+        last = self.last_file[participant]
+        try:
+            random = int(XMLFile(last).block_data.participant.random)
+        except:
+            random = None
+        return (edition_for(fromFilename(last)), random)
+
+    def create_statement(self,
+                         creator,
+                         block, number,
+                         application=None):
+        assert creator
+        assert block
+        assert number
+        if application is None:
+            application = Application()
+
+        root = XMLFile(root="bcdef_participant")
+
+        bcdef_participant = root.bcdef_participant
+        participant = bcdef_participant._addNode("participant")
+        participant._addNode("identity")._addText(creator)
+        participant._addNode("edition")._addText(
+            str(1 + self.get_last_for(creator)[0]))
+        participant._addNode("random")._addText(
+            str(int(self.random.randint(1, 8000000000000000000))))
+
+        block_data = bcdef_participant._addNode("block_data")
+        block_data._addNode("identity")._addText(block)
+        block_data._addNode("number")._addText(str(number))
+
+        applications = bcdef_participant._addNode("applications")
+        for application in applications:
+            application.add(applications)
+
+        return root.toxml()
 
 
 class Blocks:
@@ -156,6 +221,29 @@ class Blocks:
                 self.blocks[filename] = XMLFile(file=whole_filename)
             else:
                 self.required_data[filename] = 1
+
+    BLOCK_NUMBER_DIGITS = "abcdefghijkmnopqrstuvwxyz"
+
+    def _next_block_number(self, block_number):
+        if not block_number:
+            return self.BLOCK_NUMBER_DIGITS[0]
+        pos = self.BLOCK_NUMBER_DIGITS.find(block_number[-1])
+        prefix = block_number[:-1]
+        next_pos = pos + 1
+        if next_pos >= len(self.BLOCK_NUMBER_DIGITS):
+            next_pos = 0
+            prefix = self._next_block_number(prefix)
+        return prefix + self.BLOCK_NUMBER_DIGITS[next_pos]
+
+    def find_next_block_number(self):
+        filename = os.path.join(CACHE_DIR, "my_last_block_number.txt")
+        if os.path.exists(filename):
+            last = open(filename).read()
+        else:
+            last = ""
+        next_block_number = self._next_block_number(last)
+        open(filename, "w").write(next_block_number)
+        return next_block_number
 
     def create_block(self,
                      creator, identity, predecessor=None, number=0,
@@ -183,15 +271,19 @@ class Blocks:
         creator_element._addNode("next_public_key")._addText(next_public_key)
         participants_node = block_data._addNode("participants")
         seen_participant = creator
-        participants_node._addNode("edition")._addText(
-            str(participants.get_last_edition_for(creator)))
-        pred_predecessor = predecessor
-        while pred_predecessor:
-            pred_block = self.blocks[predecessor]
-            pred_creator = pred_block.creator
-            participants_node._addNode("edition")._addText(
-                participants.get_last_edition_for(pred_creator))
-            pred_predecessor = pred_block.predecessor
+        creator_node = participants_node._addNode("participant")
+        creator_node._addNode("identity")._addText(creator)
+        creator_node._addNode("edition")._addText(
+            str(1 + participants.get_last_for(creator)[0]))
+        if predecessor:
+            for participant in self.blocks[predecessor].block_data.participants:
+                if participant.identity == creator:
+                    continue
+                edition, random = participants.get_last_for(participant)
+                participant_node = participants_node._addNode("participant")
+                participant_node._addNode("identity").addText(creator)
+                participant_node._addNode("edition")._addText(str(edition))
+                participant_node._addNode("random")._addText(str(random))
                     
         if block_chain_application:
             block_chain_application.add(block_data)
@@ -234,7 +326,7 @@ class Blocks:
         Return False if not verified (i.e. something is wrong).
         Return None if verification is not possible. This is because
                more data needs to be fetched. The list of what needs
-               to be fetched can be retrieved using required_data().
+               to be fetched can be retrieved using get_required_data().
         """
         if filename in self.verified_blocks:
             return self.verified_blocks[filename]
@@ -243,6 +335,12 @@ class Blocks:
             return None
         self.verified_blocks[filename] = result
         return result
+
+    def get_required_data():
+        try:
+            return self.required_data.keys()
+        finally:
+            self.required_data = dict()
 
 
 class Application:
@@ -254,8 +352,16 @@ def toRootURI(uri):
     return uri.split("/WebOfTrust/")[0] + "/"
 
 
-def toStatementURI(uri):
-    return uri + "BlockChainStatement/0"
+def toStatementURI(uri, index=0):
+    return uri + "BlockChainStatement/" + str(index)
+
+
+def edition_for(uri):
+    return int(uri.split("/")[-1])
+
+
+def toParticipant(uri):
+    return uri.split("/BlockChainStatement/")[0] + "/"
 
 
 def toFilename(uri):
@@ -316,6 +422,7 @@ class BCMain:
             else:
                 break
 
+        self.participants.add_participant(self.requesturi)
         logging.info("You are: %s", self.nickname)
         self.blocks = Blocks()
 
@@ -351,8 +458,8 @@ class BCMain:
                             Identity=self.identity,
                             Context=CONTEXT)
 
-        # TODO: Add functions
-        # Fetch participants statements, set up subscriptions for USKs
+        # 1. Fetch entire block chain:
+        # 1.a Fetch participants from WoT
         for i in range(identities_by_score["Replies.Amount"]):
             participanturi = toRootURI(identities_by_score["Replies.RequestURI" +
                                                            str(i)])
@@ -360,50 +467,97 @@ class BCMain:
                 continue
             self.participants.add_participant(participanturi)
 
+        # 1.b Get a block reference.
         while self.participants.we_are_waiting():
             block_reference = self.participants.get_new_block_reference()
             if block_reference:
-                self.blocks.add_block(toFilename(block_reference))
-                continue
+                break
             time.sleep(10)
 
-        # As new blocks arrive:
-        # 1. Verify blocks.
-        # 2. When you have a long block chain (100 or so) or when you
-        #    have received information from everyone, publish your
-        #    statement with the last block of the longest chain.
-        # 3. Calculate when you are allowed to insert a block and do so.
+        # 1.c Fetch the block and all its predecessors.
+        uri = self.fetcher.blocking_fetch(block_reference)
+        whole_block_chain_fetched = False
+        while not whole_block_chain_fetched:
+            result = self.blocks.verify_block(toFilename(uri), last=True)
+            if result == False:
+                logging.warn("Block " + block_reference + " did not verify.")
+                block_reference = self.participants.get_new_block_reference()
+                if block_reference:
+                    logging.info("Attempting another block reference.")
+                    uri = self.fetcher.blocking_fetch(block_reference)
+                    continue
+                raise RuntimeException("Block does not verify: " + uri)
+            if result == True:
+                whole_block_chain_fetch = True
+            if result is None:
+                logging.debug("Download more info to verify")
+                for required in self.blocks.get_required_data():
+                    self.fetcher.blocking_fetch(required)
+        logging.info("Whole block chain verified")
+
+        # 2 We are live. loop:
+        # 2.a Publish own statements.
+        # 2.b Wait for statement updates.
+        # 2.c If a new statement arrives download it.
+        # 2.d If the statement contained a new block, download it.
+        # 2.e If the statement was from one of our monitored participants,
+        #     recalculate if we can create a block.
+        # 2.f If so, create a block, upload a new statement with the new block.
 
         return
 
     def create_first_block(self):
+        self.participants.wait_for_round()
+
+        number = 1
 
         pub, priv = self.node.genkey()
-        print priv
-        print self.blocks.create_block(self.requesturi,
-                                       identity=self.requesturi + "BlockChainBlock-a",
-                                       next_public_key=pub, 
-                                       block_chain_application=Application(),
-                                       participants=self.participants)
-        return
+        open(os.path.join(CACHE_DIR, "private_key_" + str(number)),
+             "w").write(priv)
 
+        block_number = self.blocks.find_next_block_number()
+        waiting_time = 2
 
-        logging.info("Inserting Block")
-        br = self.node.put(uri='SSK' + self.inserturi[3:] + "BlockChainBlock-b",
-                           data="some data in the block",
-                           mimetype="application/xml",
-                           priority=2,
-                           Verbosity=9)
-        print br
-        uri = br
-        loggin.info("Inserting Statement")
-        r = self.node.put(uri=toStatementURI(self.inserturi),
-                          data="some data: " + uri,
+        while True:
+            try:
+                block = self.blocks.create_block(self.requesturi,
+                                                 identity=(self.requesturi +
+                                                           "BlockChainBlock-" +
+                                                           block_number),
+                                                 number=number,
+                                                 next_public_key=pub,
+                                                 block_chain_application=Application(),
+                                                 participants=self.participants)
+
+                logging.info("Inserting Block " + block_number)
+                br = self.node.put(uri=('SSK' + self.inserturi[3:] +
+                                        "BlockChainBlock-" + block_number),
+                                   data=block,
+                                   mimetype="application/xml",
+                                   priority=2,
+                                   Verbosity=9)
+                logging.info("Inserted Block " + br)
+                uri = br
+                break
+            except FCPPutFailed:
+                block_number = self.blocks.find_next_block_number()
+                self.node.shutdown()
+                self.node = None
+                logging.warn("Will retry after %ds.", waiting_time)
+                time.sleep(waiting_time)
+                waiting_time += 10
+                self.restart()
+
+        logging.info("Inserting Statement")
+        my_edition = 1 + int(self.participants.get_last_for(self.requesturi)[0])
+        r = self.node.put(uri=toStatementURI(self.inserturi, my_edition),
+                          data=self.participants.create_statement(self.requesturi,
+                                                                  uri,
+                                                                  number),
                           mimetype="application/xml",
                           priority=2,
                           Verbosity=9)
-        print r
-        print "Completed Statement"
+        logging.info("Inserted Statement " + r)
 
 
 def main():
@@ -423,4 +577,5 @@ def main():
     bc_main.run()
 
 
-main()
+if __name__ == '__main__':
+    main()

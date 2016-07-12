@@ -6,7 +6,8 @@
     <created>1998-03-04T12:54:23</created>
     <creator>
       <identity>USK@FetchID1</identity>
-      <next_public_key>SSK@FetchID</next_public_key>
+      <last_private_key>SSK@InsertURI</last_private_key>
+      <next_public_key>SSK@FetchURI</next_public_key>
     </creator>
     <participants>
       <participant> <!-- for the creator of this block -->
