@@ -95,6 +95,9 @@ class Fetcher:
         open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write(data)
         return uri
 
+    def blocking_get_dom(self, uri):
+        return XMLFile(path=os.path.join(CACHE_DIR, toFilename(blocking_fetch(uri))))
+
 
 class Participants:
     """Monitor all participants and retrieve their blocks."""
@@ -140,7 +143,9 @@ class Participants:
                         logging.error("Fetched " + uri + " incorrect xml.")
                         return
                     self.queue.put(dom.bcdef_participant.block_data.identity._text)
-                except ExpatError | AttributeError:
+                except ExpatError:
+                    logging.error("Fetched " + uri + " invalid xml.")
+                except AttributeError:
                     logging.error("Fetched " + uri + " invalid xml.")
             else:
                 logging.error("Fetched " + uri + " without file.")
@@ -161,12 +166,19 @@ class Participants:
     def wait_for_round(self):
         while not self.round_finished.empty():
             self.round_finished.get()
-        return self.round_finished.get()
+        logging.debug("Waiting for round...")
+        ret = self.round_finished.get()
+        logging.debug("Waiting for round...completed.")
+        return ret
 
     def get_new_block_reference(self):
         if self.queue.empty():
             return None
         return self.queue.get(False)
+
+    def get_participants(self):
+        for participant in self.last_file:
+            yield participant
 
     def get_last_for(self, participant):
         """Return edition and random."""
@@ -461,7 +473,7 @@ class BCMain:
                             Context=CONTEXT)
 
         # 1. Fetch entire block chain:
-        # 1.a Fetch participants from WoT
+        logging.info("1.a Fetch participants from WoT")
         for i in range(identities_by_score["Replies.Amount"]):
             participanturi = toRootURI(identities_by_score["Replies.RequestURI" +
                                                            str(i)])
@@ -469,14 +481,43 @@ class BCMain:
                 continue
             self.participants.add_participant(participanturi)
 
-        # 1.b Get a block reference.
+        logging.info("1.b Get a block reference.")
+        block_reference = None
         while self.participants.we_are_waiting():
             block_reference = self.participants.get_new_block_reference()
             if block_reference:
                 break
+            self.participants.wait_for_round()
+            block_reference = self.participants.get_new_block_reference()
+            if block_reference:
+                break
+            # We didn't get anything.
+            logging.info("Round finished without result. " +
+                         "Use an old block if all participants agree.")
+            block_reference = None
+            for participant in self.participants.get_participants():
+                edition = self.participants.get_last_for(participant)[0]
+                statement_uri = toStatementURI(participant, edition)
+                dom = self.fetcher.blocking_get_dom(statement_uri)
+                br = dom.bcdef_participant.participant.block_data.identity._text
+
+                if not block_reference:
+                    block_reference = br
+                    continue
+                if block_reference != br:
+                    logging.info("Not all participants agree on the block")
+                    block_reference = None
+                    break
+            if block_reference:
+                break
             time.sleep(10)
 
-        # 1.c Fetch the block and all its predecessors.
+        if not block_reference:
+            logging.error("Could not find block.")
+            return
+
+        logging.info("1.c Fetch the block " + block_reference + " " +
+                     "and all its predecessors.")
         uri = self.fetcher.blocking_fetch(block_reference)
         whole_block_chain_fetched = False
         while not whole_block_chain_fetched:
@@ -497,19 +538,26 @@ class BCMain:
                     self.fetcher.blocking_fetch(required)
         logging.info("Whole block chain verified")
 
-        # 2 We are live. loop:
-        # 2.a Publish own statements.
-        # 2.b Wait for statement updates.
-        # 2.c If a new statement arrives download it.
-        # 2.d If the statement contained a new block, download it.
-        # 2.e If the statement was from one of our monitored participants,
-        #     recalculate if we can create a block.
-        # 2.f If so, create a block, upload a new statement with the new block.
+        logging.info("2 We are live.")
+        while True:
+            logging.info("2.a Publish own statement.")
+            logging.error("Not implemented yet.")
+            logging.info("2.b Wait for statement updates.")
+            logging.error("Not implemented yet.")
+            logging.info("2.c If a new statement arrives download it.")
+            logging.error("Not implemented yet.")
+            logging.info("2.d If the statement contained a new block, download it.")
+            logging.error("Not implemented yet.")
+            logging.info("2.e If the statement was from one of our monitored participants recalculate if we can create a block.")
+            logging.error("Not implemented yet.")
+            logging.info("2.f If so, create a block, upload a new statement with the new block.")
+            logging.error("Not implemented yet.")
+            break
 
         return
 
     def create_first_block(self):
-        # self.participants.wait_for_round()
+        self.participants.wait_for_round()
 
         number = 1
 
