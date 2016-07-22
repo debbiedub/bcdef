@@ -538,9 +538,26 @@ class BCMain:
                     self.fetcher.blocking_fetch(required)
         logging.info("Whole block chain verified")
 
+        last_block_dom = XMLFile(path=os.path.join(CACHE_DIR,
+                                                   toFilename(block_reference)))
+
         logging.info("2 We are live.")
         while True:
             logging.info("2.a Publish own statement.")
+            block_element = last_block_dom.bcdef_block.block_data
+            my_edition = 1 + int(self.participants.get_last_for(self.requesturi)[0])
+            logging.debug("Inserting Statement " + self.requesturi + " " +
+                          str(my_edition) + " " +
+                          block_element.identity._text)
+            r = self.node.put(uri=toStatementURI(self.inserturi, my_edition),
+                              data=self.participants.create_statement(self.requesturi,
+                                                                      block_element.identity._text,
+                                                                      int(block_element.number._text)),
+                              mimetype="application/xml",
+                              priority=2,
+                              Verbosity=9)
+            logging.debug("Inserted Statement " + r)
+
             logging.error("Not implemented yet.")
             logging.info("2.b Wait for statement updates.")
             logging.error("Not implemented yet.")
