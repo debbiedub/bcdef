@@ -1,3 +1,3 @@
 # bcdef
 
-An attempt at a wiki.
+This is an attempt at a wiki.
