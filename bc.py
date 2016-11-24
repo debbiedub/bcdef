@@ -43,7 +43,7 @@ class Fetcher:
             self.already_fetching[uri].append(callback)
         else:
             self.already_fetching[uri] = [callback]
-            ticket = self.node.node.get(uri, async=True,
+            ticket = self.node.node.get(uri, async=True, priority=1,
                                         callback=self.callback)
             self.ids[ticket.id] = ticket
         
@@ -88,7 +88,7 @@ class Fetcher:
         If the data is not found, an exception is thrown (from lower level)."""
         if uri in self.in_cache:
             return uri
-        result = self.node.node.get(uri, async=False)
+        result = self.node.node.get(uri, async=False, priority=1)
         content_type, data, parameters = result
         if content_type != CONTENT_TYPE:
             raise RuntimeError("Incorrect content_type")
@@ -157,6 +157,7 @@ class Participants:
         self.node.node._submitCmd(id, "SubscribeUSK",
                                   URI=statementuri,
                                   Identifier=id,
+                                  priority=1,
                                   callback=self.usk_callback,
                                   async=True)
 
@@ -459,7 +460,7 @@ class BCMain:
                 waiting_time += 10
                 self.restart()
 
-    def run(self):
+    def verify_whole_blockchain(self):
         identities_by_score = self.WOTMessage("GetTrustees",
                                               Context=CONTEXT,
                                               Identity=self.identity)[0]
@@ -538,19 +539,22 @@ class BCMain:
                     self.fetcher.blocking_fetch(required)
         logging.info("Whole block chain verified")
 
-        logging.info("2 We are live.")
+    def run(self):
+        self.verify_whole_blockchain()
+        logging.info("2. Open wiki.")
+        logging.error("Not implemented yet.")
         while True:
-            logging.info("2.a Publish own statement.")
+            logging.info("3.a Publish own statement.")
             logging.error("Not implemented yet.")
-            logging.info("2.b Wait for statement updates.")
+            logging.info("3.b Wait for statement updates.")
             logging.error("Not implemented yet.")
-            logging.info("2.c If a new statement arrives download it.")
+            logging.info("3.b.1. If a new statement arrives download it.")
             logging.error("Not implemented yet.")
-            logging.info("2.d If the statement contained a new block, download it.")
+            logging.info("3.b.2. If the statement contained a new block, download it. Verify it and restart from 3.a.")
             logging.error("Not implemented yet.")
-            logging.info("2.e If the statement was from one of our monitored participants recalculate if we can create a block.")
+            logging.info("3.b.3. If the statement was from one of our monitored participants recalculate if we can create a block.")
             logging.error("Not implemented yet.")
-            logging.info("2.f If so, create a block, upload a new statement with the new block.")
+            logging.info("3.b.4. If so, create a block, upload a new statement with the new block.")
             logging.error("Not implemented yet.")
             break
 
