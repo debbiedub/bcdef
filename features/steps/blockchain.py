@@ -1,3 +1,7 @@
+@given(u'no user exists')
+def step_impl(context):
+    assert not context.node_simulator.users
+
 @given(u'there are other blockchain users')
 def step_impl(context):
     context.node_simulator.add_user("Adam")
