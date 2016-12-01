@@ -1,6 +1,6 @@
-@given(u'no user exists')
+@given(u'the WOT ID exists')
 def step_impl(context):
-    assert not context.node_simulator.users
+    context.node_simulator.add_user("Me", insert=True)
 
 @given(u'there are other blockchain users')
 def step_impl(context):
