@@ -114,6 +114,7 @@ class Participants:
     def usk_callback(self, status, value):
         logging.debug("Participants USK-callback " +
                       str(status) + " " + str(value))
+        assert status in ['successful', 'failed']
         if status != 'successful':
             return
         if value["header"] == "SubscribedUSK":
