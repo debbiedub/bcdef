@@ -1,0 +1,2 @@
+class XMLFile(object):
+    pass

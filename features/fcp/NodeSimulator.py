@@ -23,6 +23,12 @@ class NodeSimulator(object):
     def call(self, method, **kwargs):
         self.processor.apply_async(method, [], kwargs)
 
+    def delayed_call(self, method, **kwargs):
+        def m(self, method, kwargs):
+            sleep(1.0)
+            self.call(method, **kwargs)
+        self.processor.apply_async(m, self, method, kwargs)
+
     def shutdown(self):
         self.processor.close()
         self.processor.join()

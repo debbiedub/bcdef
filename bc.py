@@ -108,6 +108,7 @@ class Participants:
         self.queue = Queue()
         self.last_file = dict()
         self.round_finished = Queue(maxsize=1)
+        self.round_timeout = None
         self.random = random.Random()
 
     def usk_callback(self, status, value):
@@ -168,7 +169,7 @@ class Participants:
         while not self.round_finished.empty():
             self.round_finished.get()
         logging.debug("Waiting for round...")
-        ret = self.round_finished.get()
+        ret = self.round_finished.get(timeout=self.round_timeout)
         logging.debug("Waiting for round...completed.")
         return ret
 
