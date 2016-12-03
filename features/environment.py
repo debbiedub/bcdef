@@ -1,10 +1,15 @@
+import os
+import shutil
 from multiprocessing import Queue
+
 from fcp.NodeSimulator import NodeSimulator
 from fcp.CommunicationQueues import comm
 
 
 def before_scenario(context, scenario):
     context.node_simulator = NodeSimulator()
+    if os.path.exists("cache"):
+        shutil.rmtree("cache")
 
 
 def after_scenario(context, scenario):
