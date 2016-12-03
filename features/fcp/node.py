@@ -1,47 +1,61 @@
-import NodeSimulator
+from CommunicationQueues import comm
+
 
 DETAIL = object()
+
+
+def _run(node_to_bc):
+    while True:
+        gotten = node_to_bc.get()
+        if gotten == "SHUTDOWN":
+            break
+
+        
 class FCPNode(object):
     def __init__(self, verbosity):
         assert verbosity == DETAIL
+        global comm
+        assert comm
+        assert comm.bc_to_node
+        comm.bc_to_node.put(("hello",))
+        self.wait_for("olleh")
+
+        self.node_poller = Process(target=_run, args=(comm.node_to_bc,))
+        self.node_poller.start()
+
+    def wait_for(self, response):
+        global comm
+        assert comm
+        assert comm.node_to_bc
+        while True:
+            gotten = comm.node_to_bc.get()
+            if gotten[0] == response:
+                return gotten
 
     def fcpPluginMessage(self, plugin_name, plugin_params):
+        global comm
+
         assert plugin_name == "plugins.WebOfTrust.WebOfTrust"
 
         message = plugin_params["Message"]
         assert message in ["Ping", "GetTrustees", "AddContext", "GetOwnIdentities"]
 
-        if message == "Ping":
-            return ["Pong"]
+        comm.bc_to_node.put(("fcpPluginMessage", plugin_name, plugin_params,))
+        return self.wait_for("me")
 
-        if message == "GetOwnIdentities":
-            node_simulator = NodeSimulator.get()
-            reply = {"Replies.Amount":len(node_simulator.users)}
-            index = 0
-            for username in node_simulator.users:
-                reply["Replies.Nickname" + str(index)] = username
-                reply["Replies.Identity" + str(index)] = "USK@identity_" + username + "/"
-                if node_simulator.users[username].insert:
-                    reply["Replies.InsertURI" + str(index)] = "USK@insert_" + username
-                reply["Replies.RequestURI" + str(index)] = "USK@request_" + username
-                index = index + 1
-            return [reply]
+    def _submitCmd(self, *args, **kwargs):
+        global comm
 
-        raise NotImplementedError(message)
+        assert kwargs["async"] == False
 
-    def _submitCmd(self, id, order, **kwargs):
+        id, order = args
         assert order == "SubscribeUSK"
-        node_simulator = NodeSimulator.get()
-        if kwargs["async"]:
-            node_simulator.call(kwargs["callback"],
-                                status='successful',
-                                header="SubscribedUSK",
-                                URI=kwargs["URI"])
-            node_simulator.delayed_call(kwargs["callback"],
-                                        status='successful',
-                                        header="SubscribedUSKRoundFinished")
-        else:
-            raise NotImplementedError()
+        comm.bc_to_node.put(("_submitCmd", args, kwargs,))
+
+    def put(self, *args, **kwargs):
+        global comm
+        comm.bc_to_node.put(("put", args, kwargs,))
+        
 
 class FCPProtocolError(Exception):
     pass
