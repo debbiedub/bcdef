@@ -105,6 +105,8 @@ class Participants:
         self.node = node
         self.fetcher = fetcher
         self.last_id = 0
+        self.last_block = None
+        self.last_block_number = -1
         self.queue = Queue()
         self.last_file = dict()
         self.round_finished = Queue(maxsize=1)
@@ -144,7 +146,13 @@ class Participants:
                     if not self.validate_dom(dom):
                         logging.error("Fetched " + uri + " incorrect xml.")
                         return
-                    self.queue.put(dom.bcdef_participant.block_data.identity._text)
+                    new_block = dom.bcdef_participant.block_data.identity._text
+                    new_block_number = int(dom.bcdef_participant.block_data.edition._text)
+                    if self.last_block != new_block:
+                        if self.last_block_number <= new_block_number:
+                            self.last_block = new_block
+                            self.last_block_number = new_block_number
+                            self.queue.put(new_block)
                 except ExpatError:
                     logging.error("Fetched " + uri + " invalid xml.")
                 except AttributeError:
