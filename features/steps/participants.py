@@ -1,7 +1,7 @@
 import os
 
-from bc import Participants, CACHE_DIR, toFilename, toParticipant
-
+from bc import Participants
+from fcp.xmlobject import XMLFile
 
 class FCPNode(object):
     def _submitCmd(self, *args, **kwargs):
@@ -16,17 +16,30 @@ class Node(object):
 
 
 class Fetcher(object):
+    def __init__(self, cache):
+        self.cache = cache
+
     def fetch(self, uri, callback):
-        if not os.path.exists(CACHE_DIR):
-            os.mkdir(CACHE_DIR)
-        open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write("contents")
+        self.cache.write_uri(uri, "contents")
         callback(uri=uri, success=False)
         callback(uri=uri, success=True)
 
 
+class Cache(object):
+    def __init__(self):
+        self.contents = dict()
+
+    def write_uri(self, uri, contents):
+        self.contents[uri] = contents
+
+    def get_uri(self, uri):
+        return XMLFile(contents=self.contents[uri])
+
+
 @given(u'there are no participants')
 def step_impl(context):
-    context.tested_object = Participants(Node(), Fetcher())
+    cache = Cache()
+    context.tested_object = Participants(Node(), Fetcher(cache), cache)
 
 @when(u'a participant is added')
 def step_impl(context):
@@ -38,7 +51,8 @@ def step_impl(context):
 
 @given(u'one participant with a block')
 def step_impl(context):
-    context.tested_object = Participants(Node(), Fetcher())
+    cache = Cache()
+    context.tested_object = Participants(Node(), Fetcher(cache), cache)
     context.tested_object.add_participant("URI")
     assert context.tested_object.get_new_block_reference()
 

@@ -15,24 +15,51 @@ from Queue import Queue
 
 CONTEXT = "BCDEF"
 CONTENT_TYPE = "application/xml"
-CACHE_DIR = "cache"
 
 
-class Fetcher:
+class FileCache(object):
+    """Cache for storing the fetched data."""
+    CACHE_DIR = "cache"
+    
+    def __init__(self):
+        self.in_cache = dict()
+
+        if not os.path.exists(self.CACHE_DIR):
+            os.mkdir(self.CACHE_DIR)
+
+        for dirpath, dirnames, filenames in os.walk(self.CACHE_DIR):
+            for filename in filenames:
+                self.in_cache[fromFilename(filename)] = 1
+
+    def write_uri(uri, data):
+        filename = toFilename(uri)
+        open(os.path.join(self.CACHE_DIR, filename), "w").write(data)
+        self.in_cache[fromFilename(filename)] = 1
+
+    def get_uri(uri):
+        if self.in_cache[fromFilename(toFilename(uri))]:
+            return XMLFile(path=os.path.join(self.CACHE_DIR, toFilename(uri)))
+        else:
+            return None
+
+    def get_file(filename, default_contents=None):
+        path = os.path.join(CACHE_DIR, filename)
+        if os.path.exists(path) or not default_contents:
+            return open(path).read()
+        return default_contents
+
+    def write_file(filename, data):
+        open(os.path.join(CACHE_DIR, filename), "w").write(data)
+
+
+class Fetcher(object):
     """Keeps track of all fetched URI:s and the cache."""
-    def __init__(self, node):
+    def __init__(self, node, cache):
         self.node = node
+        self.cache = cache
 
         self.already_fetching = dict()  # uri => [callback, ...]
-        self.in_cache = dict()
         self.ids = dict()  # identity => Jobticket
-
-        if not os.path.exists(CACHE_DIR):
-            os.mkdir(CACHE_DIR)
-        else:
-            for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
-                for filename in filenames:
-                    self.in_cache[fromFilename(filename)] = 1
 
     def fetch(self, uri, callback):
         """When done, CALLBACK is called with URI and success (a boolean)."""
@@ -75,7 +102,7 @@ class Fetcher:
             return
 
         logging.info("Fetched " + uri)
-        open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write(data)
+        self.cache.write_uri(uri, data)
         for callback in self.already_fetching[uri]:
             callback(uri, True)
         self.already_fetching.pop(uri)
@@ -92,18 +119,20 @@ class Fetcher:
         content_type, data, parameters = result
         if content_type != CONTENT_TYPE:
             raise RuntimeError("Incorrect content_type")
-        open(os.path.join(CACHE_DIR, toFilename(uri)), "w").write(data)
+        self.cache.write_uri(uri, data)
         return uri
 
     def blocking_get_dom(self, uri):
-        return XMLFile(path=os.path.join(CACHE_DIR, toFilename(blocking_fetch(uri))))
+        blocking_fetch(uri)
+        return get_uri(uri)
 
 
 class Participants:
     """Monitor all participants and retrieve their blocks."""
-    def __init__(self, node, fetcher):
+    def __init__(self, node, fetcher, cache):
         self.node = node
         self.fetcher = fetcher
+        self.cache = cache
         self.last_id = 0
         self.last_block = None
         self.last_block_number = -1
@@ -138,25 +167,27 @@ class Participants:
 
     def fetch_callback(self, uri, success):
         if success:
-            filename = os.path.join(CACHE_DIR, toFilename(uri))
-            if os.path.exists(filename):
-                self.last_file[toParticipant(uri)] = filename
-                try:
-                    dom = XMLFile(path=filename)
-                    if not self.validate_dom(dom):
-                        logging.error("Fetched " + uri + " incorrect xml.")
-                        return
-                    new_block = dom.bcdef_participant.block_data.identity._text
-                    new_block_number = int(dom.bcdef_participant.block_data.edition._text)
-                    if self.last_block != new_block:
-                        if self.last_block_number <= new_block_number:
-                            self.last_block = new_block
-                            self.last_block_number = new_block_number
-                            self.queue.put(new_block)
-                except ExpatError:
-                    logging.error("Fetched " + uri + " invalid xml.")
-                except AttributeError:
-                    logging.error("Fetched " + uri + " invalid xml.")
+            try:
+                dom = self.cache.get_uri(uri)
+            except ExpatError:
+                logging.error("Fetched " + uri + " invalid xml.")
+                return
+            except AttributeError:
+                logging.error("Fetched " + uri + " invalid xml.")
+                return
+                
+            if dom:
+                self.last_file[toParticipant(uri)] = 1
+                if not self.validate_dom(dom):
+                    logging.error("Fetched " + uri + " incorrect xml.")
+                    return
+                new_block = dom.bcdef_participant.block_data.identity._text
+                new_block_number = int(dom.bcdef_participant.block_data.edition._text)
+                if self.last_block != new_block:
+                    if self.last_block_number <= new_block_number:
+                        self.last_block = new_block
+                        self.last_block_number = new_block_number
+                        self.queue.put(new_block)
             else:
                 logging.error("Fetched " + uri + " without file.")
 
@@ -235,18 +266,19 @@ class Blocks:
     """Block verifyer and constructor.
     Works only on blocks that are in files.
     In the first implementation, everything is in memory."""
-    def __init__(self):
-        self.blocks = dict()  # filename => dom
-        self.verified_blocks = dict()  # filename => True or False
+    def __init__(self, cache):
+        self.blocks = dict()  # uri => dom
+        self.verified_blocks = dict()  # uri => True or False
         self.required_data = dict()  # uri => 1
+        self.cache = cache
 
-    def add_block(self, filename):
+    def add_block(self, uri):
         if filename not in self.blocks:
-            whole_filename = os.path.join(CACHE_DIR, filename)
-            if os.path.exists(whole_filename):
-                self.blocks[filename] = XMLFile(path=whole_filename)
+            dom = self.cache.get_uri(uri)
+            if dom:
+                self.blocks[uri] = dom
             else:
-                self.required_data[filename] = 1
+                self.required_data[uri] = 1
 
     BLOCK_NUMBER_DIGITS = "abcdefghijkmnopqrstuvwxyz"
 
@@ -262,13 +294,10 @@ class Blocks:
         return prefix + self.BLOCK_NUMBER_DIGITS[next_pos]
 
     def find_next_block_number(self):
-        filename = os.path.join(CACHE_DIR, "my_last_block_number.txt")
-        if os.path.exists(filename):
-            last = open(filename).read()
-        else:
-            last = ""
+        FILENAME = "my_last_block_number.txt"
+        last = self.cache.get_file(FILENAME, "")
         next_block_number = self._next_block_number(last)
-        open(filename, "w").write(next_block_number)
+        self.cache.write_file(FILENAME, next_block_number)
         return next_block_number
 
     def create_block(self,
@@ -319,22 +348,22 @@ class Blocks:
 
         return root.toxml()
         
-    def _check_block(self, filename):
+    def _check_block(self, uri):
         "Does verification but does not store the result."
-        self.add_block(filename)
-        root = self.blocks[filename]
+        self.add_block(uri)
+        root = self.blocks[uri]
         if hasattr(root.bcdef_block.block_data, "previous_block"):
-            previous_filename = toFilename(root.bcdef_blockblock_data.previous_block._text)
-            previous_result = self.verify_block(previous_filename)
+            previous_uri = root.bcdef_blockblock_data.previous_block._text
+            previous_result = self.verify_block(previous_uri, last=False)
             if previous_result is False:
-                logging.warn("Previous block did not verify for " + filename)
+                logging.warn("Previous block did not verify for " + uri)
                 return False
             if previous_result is None:
                 return None
             if (int(root.bcdef_block.block_data.number._text) != 
                 self.blocks[previous_filename].block_data.number + 1):
                 logging.warn("Is not a successor of the previous block: " + 
-                             filename)
+                             uri)
                 return False
 
         logging.warn("Need to add more elaborate checks to verify every block.")
@@ -342,7 +371,7 @@ class Blocks:
         return True
         
                 
-    def verify_block(self, filename, last):
+    def verify_block(self, uri, last):
         """Verify a block.
 
         If it is the LAST block, do extra verifications.
@@ -353,12 +382,12 @@ class Blocks:
                more data needs to be fetched. The list of what needs
                to be fetched can be retrieved using get_required_data().
         """
-        if filename in self.verified_blocks:
-            return self.verified_blocks[filename]
-        result = self._check_block(filename)
+        if uri in self.verified_blocks:
+            return self.verified_blocks[uri]
+        result = self._check_block(uri)
         if result is None:
             return None
-        self.verified_blocks[filename] = result
+        self.verified_blocks[uri] = result
         return result
 
     def get_required_data():
@@ -411,8 +440,9 @@ class BCMain:
         logging.info("Connected to the node")
 
     def __init__(self, name=None):
-        self.fetcher = Fetcher(self)
-        self.participants = Participants(self, self.fetcher)
+        self.cache = FileCache()
+        self.fetcher = Fetcher(self, self.cache)
+        self.participants = Participants(self, self.fetcher, self.cache)
 
         self.restart()
         self._wait_for_wot()
@@ -532,7 +562,7 @@ class BCMain:
         uri = self.fetcher.blocking_fetch(block_reference)
         whole_block_chain_fetched = False
         while not whole_block_chain_fetched:
-            result = self.blocks.verify_block(toFilename(uri), last=True)
+            result = self.blocks.verify_block(uri, last=True)
             if result == False:
                 logging.warn("Block " + block_reference + " did not verify.")
                 block_reference = self.participants.get_new_block_reference()
@@ -576,8 +606,7 @@ class BCMain:
         number = 1
 
         pub, priv = self.node.genkey()
-        open(os.path.join(CACHE_DIR, "private_key_" + str(number)),
-             "w").write(priv)
+        self.cache.write_file("private_key_" + str(number), priv)
 
         block_number = self.blocks.find_next_block_number()
         waiting_time = 2
