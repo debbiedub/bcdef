@@ -4,12 +4,6 @@ from CommunicationQueues import comm
 DETAIL = object()
 
 
-def _run(node_to_bc):
-    while True:
-        gotten = node_to_bc.get()
-        if gotten == "SHUTDOWN":
-            break
-
         
 class FCPNode(object):
     def __init__(self, verbosity):
@@ -17,31 +11,40 @@ class FCPNode(object):
         global comm
         assert comm
         assert comm.bc_to_node
+        comm.bc_to_node.put(("DEBUG", "Node __init__...",))
         comm.bc_to_node.put(("hello",))
         self.wait_for("olleh")
+        comm.bc_to_node.put(("DEBUG", "Node __init__...done",))
+        
+    def wait_for(self, response=None):
+        if response:
+            expected = "'" + str(response) + "'"
+        else:
+            expected = "anything"
 
-        self.node_poller = Process(target=_run, args=(comm.node_to_bc,))
-        self.node_poller.start()
-
-    def wait_for(self, response):
         global comm
         assert comm
         assert comm.node_to_bc
+        comm.bc_to_node.put(("DEBUG", "Node wait_for " + expected + "...",))
         while True:
-            gotten = comm.node_to_bc.get()
+            try:
+                gotten = comm.node_to_bc.get(timeout=2)
+            except Empty:
+                comm.bc_to_node.put(("DEBUG", "Node wait_for " + expected + " got nothing.",))
+                raise RuntimeError("Expected " + expected + " got nothing.")
+            comm.bc_to_node.put(("DEBUG", "Node wait_for " + expected + " got '" + str(gotten) + "'.",))
+            if not response:
+                return gotten
             if gotten[0] == response:
                 return gotten
 
     def fcpPluginMessage(self, plugin_name, plugin_params):
         global comm
-
-        assert plugin_name == "plugins.WebOfTrust.WebOfTrust"
-
-        message = plugin_params["Message"]
-        assert message in ["Ping", "GetTrustees", "AddContext", "GetOwnIdentities"]
-
+        comm.bc_to_node.put(("DEBUG", "Node fcpPluginMessage...",))
         comm.bc_to_node.put(("fcpPluginMessage", plugin_name, plugin_params,))
-        return self.wait_for("me")
+        ret = self.wait_for()
+        comm.bc_to_node.put(("DEBUG", "Node fcpPluginMessage...returning",))
+        return ret
 
     def _submitCmd(self, *args, **kwargs):
         global comm

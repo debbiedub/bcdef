@@ -1,4 +1,5 @@
 from CommunicationQueues import comm
+from Queue import Empty
 
 
 class Block(object):
@@ -28,12 +29,30 @@ class NodeSimulator(object):
     def expect(self, response):
         global comm
         while comm.bc_to_node:
-            gotten = comm.bc_to_node.get(timeout=10)
+            try:
+                gotten = comm.bc_to_node.get(timeout=2)
+            except Empty:
+                raise RuntimeError("Expected '" + response + "' got nothing.")
+            if gotten[0] == "LOGGING":
+                print gotten[1]
+                continue
+            if gotten[0] == "DEBUG":
+                print gotten[1]
+                continue
             if gotten[0] == response:
                 return gotten
             else:
-                raise RuntimeError("Expected " + response + " gotten " + str(gotten))
+                raise RuntimeError("Expected '" + response + "' gotten " + str(gotten))
+
+    def expect_wot(self, message):
+        response = self.expect("fcpPluginMessage")
+        assert response[1] == "plugins.WebOfTrust.WebOfTrust"
+        assert response[2]["Message"] == message
+        return response[2]
 
     def respond(self, response):
         global comm
         comm.node_to_bc.put(response)
+
+    def respond_wot(self, response):
+        self.respond((response,))
