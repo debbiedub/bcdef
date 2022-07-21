@@ -3,12 +3,46 @@
  */
 package freenet.bcdef;
 
-public class App {
-    public String getGreeting() {
-        return "Hello World!";
-    }
+import freenet.bcdef.web.WebInterface;
+import freenet.l10n.BaseL10n.LANGUAGE;
+import freenet.pluginmanager.FredPlugin;
+import freenet.pluginmanager.FredPluginL10n;
+import freenet.pluginmanager.FredPluginThreadless;
+import freenet.pluginmanager.FredPluginVersioned;
+import freenet.pluginmanager.PluginRespirator;
+import freenet.support.Logger;
 
-    public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
-    }
+public class App implements FredPlugin, FredPluginVersioned, FredPluginThreadless, FredPluginL10n {
+	final String VERSION = "0.2";
+
+	private WebInterface webInterface;
+
+	@Override
+	public void runPlugin(PluginRespirator pr) {
+		Logger.normal(this, "Starting plugin");
+
+		webInterface = new WebInterface(this, pr.getHLSimpleClient(), pr.getToadletContainer(), pr.getPageMaker());
+		webInterface.load();
+	}
+
+	@Override
+	public void terminate() {
+		Logger.normal(this, "Terminating plugin");
+		webInterface.unload();
+	}
+
+	@Override
+	public String getVersion() {
+		return VERSION;
+	}
+
+	@Override
+	public String getString(String key) {
+		return "BCDEF";
+	}
+
+	@Override
+	public void setLanguage(LANGUAGE newLanguage) {
+		// TODO Handle language change
+	}
 }

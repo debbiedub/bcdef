@@ -22,9 +22,18 @@ dependencies {
 
     // This dependency is used by the application.
     implementation 'com.google.guava:guava:30.1.1-jre'
+
+    // This relies on a special structure for fred
+    implementation files('../../fred/build/libs/freenet.jar')
 }
 
 application {
     // Define the main class for the application.
     mainClass = 'freenet.bcdef.App'
+}
+
+jar {
+    manifest {
+        attributes 'Plugin-Main-Class': 'freenet.bcdef.App'
+    }
 }
