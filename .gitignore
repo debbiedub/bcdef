@@ -7,3 +7,6 @@ cache
 # Ignore Gradle build output directory
 build
 bin
+
+/doc/.sass-cache
+/doc/_site
