@@ -4,11 +4,16 @@
 package freenet.bcdef;
 
 import org.junit.Test;
+
 import static org.junit.Assert.*;
 
+import java.io.IOException;
+
 public class AppTest {
-    @Test public void appHasAGreeting() {
-        App classUnderTest = new App();
-        assertNotNull("app should have a greeting", classUnderTest.getGreeting());
+    @Test public void pluginCanRun() throws IOException {
+        // I need to mock a lot of the node to do tests on the plugin
+	//    	App classUnderTest = new App();
+	//        classUnderTest.runPlugin(null);
+	//        classUnderTest.terminate();
     }
 }
