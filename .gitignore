@@ -10,3 +10,4 @@ bin
 
 /doc/.sass-cache
 /doc/_site
+/doc/.jekyll-cache
