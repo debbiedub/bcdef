@@ -16,15 +16,15 @@ import freenet.support.api.HTTPRequest;
 /**
  * The hello page is a simple page with text.
  */
-public class HelloPageToadlet extends Toadlet {
+public class RestToadlet extends Toadlet {
 
-	protected HelloPageToadlet(HighLevelSimpleClient client, App app) {
+	protected RestToadlet(HighLevelSimpleClient client, App app) {
 		super(client);
 	}
 
 	@Override
 	public String path() {
-		return "/bcdef/hello";
+		return "/bcdata";
 	}
 
 	public void handleMethodGET(URI uri, final HTTPRequest request, final ToadletContext ctx) 
@@ -43,9 +43,10 @@ public class HelloPageToadlet extends Toadlet {
 	}
 
 	private void writeContent(HTTPRequest request, HTMLNode contentNode) {
-		contentNode.addChild("#", "Hello text.");
-		contentNode.addChild("br");
-		contentNode.addChild("#", "More text 3");
-		contentNode.addChild("br");
+		contentNode.addChild("p", "Rest page");
+		contentNode.addChild("p", "" + request);
+		contentNode.addChild("p", "" + request.getPath());
+		contentNode.addChild("p", "" + request.hasParameters());
+		contentNode.addChild("p", "" + request.getParameterNames());
 	}
 }
